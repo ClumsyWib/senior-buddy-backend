@@ -539,3 +539,80 @@ class ActivityLogListView(generics.ListCreateAPIView):
         elif 'ADMIN' in roles:
             return ActivityLog.objects.all()
         return ActivityLog.objects.none()
+    
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated])
+def my_senior_profile(request):
+    """
+    GET /api/my-profile/senior/  — Get my senior profile
+    PUT /api/my-profile/senior/  — Update my senior profile
+    """
+    try:
+        profile = SeniorProfile.objects.get(senior=request.user)
+    except SeniorProfile.DoesNotExist:
+        return Response(
+            {'error': 'Senior profile not found.'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if request.method == 'GET':
+        return Response(SeniorProfileSerializer(profile).data)
+
+    serializer = SeniorProfileSerializer(profile, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated])
+def my_caregiver_profile(request):
+    try:
+        profile = CaregiverProfile.objects.get(caregiver=request.user)
+    except CaregiverProfile.DoesNotExist:
+        return Response({'error': 'Caregiver profile not found.'}, status=404)
+
+    if request.method == 'GET':
+        return Response(CaregiverProfileSerializer(profile).data)
+
+    serializer = CaregiverProfileSerializer(profile, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=400)
+
+
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated])
+def my_family_profile(request):
+    try:
+        profile = FamilyProfile.objects.get(family=request.user)
+    except FamilyProfile.DoesNotExist:
+        return Response({'error': 'Family profile not found.'}, status=404)
+
+    if request.method == 'GET':
+        return Response(FamilyProfileSerializer(profile).data)
+
+    serializer = FamilyProfileSerializer(profile, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=400)
+
+
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated])
+def my_volunteer_profile(request):
+    try:
+        profile = VolunteerProfile.objects.get(volunteer=request.user)
+    except VolunteerProfile.DoesNotExist:
+        return Response({'error': 'Volunteer profile not found.'}, status=404)
+
+    if request.method == 'GET':
+        return Response(VolunteerProfileSerializer(profile).data)
+
+    serializer = VolunteerProfileSerializer(profile, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=400)

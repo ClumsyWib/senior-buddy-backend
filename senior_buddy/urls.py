@@ -31,6 +31,11 @@ urlpatterns = [
     path('family/',     views.FamilyProfileListView.as_view(),    name='family-list'),
     path('volunteers/', views.VolunteerProfileListView.as_view(), name='volunteer-list'),
 
+    path('my-profile/senior/', views.my_senior_profile, name='my-senior-profile'),
+    path('my-profile/caregiver/', views.my_caregiver_profile, name='my-caregiver-profile'),
+    path('my-profile/family/',    views.my_family_profile,    name='my-family-profile'),
+    path('my-profile/volunteer/', views.my_volunteer_profile, name='my-volunteer-profile'),
+
     # --------------------------------------------------
     # ASSIGNMENTS
     # --------------------------------------------------
