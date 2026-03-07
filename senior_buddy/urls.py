@@ -15,6 +15,7 @@ urlpatterns = [
     path('register/', views.register_view, name='register'),
     path('logout/',   views.logout_view,   name='logout'),
     path('me/',       views.me_view,       name='me'),
+    path('my-seniors/', views.my_seniors, name='my-seniors'),
 
     # --------------------------------------------------
     # USERS (Admin only)

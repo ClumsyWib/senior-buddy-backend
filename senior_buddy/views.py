@@ -616,3 +616,32 @@ def my_volunteer_profile(request):
         serializer.save()
         return Response(serializer.data)
     return Response(serializer.errors, status=400)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_seniors(request):
+    """
+    GET /api/my-seniors/
+    Returns only the seniors linked to the logged-in user.
+    Works for Caregiver, Family, and Volunteer.
+    """
+    user  = request.user
+    roles = list(user.userrole_set.values_list('role__role_name', flat=True))
+
+    if 'CAREGIVER' in roles:
+        senior_ids = SeniorCaregiver.objects.filter(
+            caregiver=user
+        ).values_list('senior_id', flat=True)
+    elif 'FAMILY' in roles:
+        senior_ids = SeniorFamily.objects.filter(
+            family=user
+        ).values_list('senior_id', flat=True)
+    elif 'VOLUNTEER' in roles:
+        senior_ids = SeniorVolunteer.objects.filter(
+            volunteer=user
+        ).values_list('senior_id', flat=True)
+    else:
+        return Response({'error': 'Only Caregiver, Family, or Volunteer can use this endpoint.'}, status=403)
+
+    seniors = SeniorProfile.objects.filter(senior_id__in=senior_ids)
+    return Response(SeniorProfileSerializer(seniors, many=True).data)
