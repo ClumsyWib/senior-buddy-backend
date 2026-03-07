@@ -52,7 +52,11 @@ def login_view(request):
     Header → Authorization: Bearer <access_token>
     """
     serializer = LoginSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
+    if not serializer.is_valid():
+        return Response(
+            {'error': 'Invalid email or password.'},
+            status=status.HTTP_401_UNAUTHORIZED
+    )
 
     user    = serializer.validated_data['user']
     refresh = RefreshToken.for_user(user)
@@ -73,7 +77,21 @@ def register_view(request):
             "password": "...", "role_name": "SENIOR" }
     """
     serializer = RegisterSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
+    if not serializer.is_valid():
+        if 'email' in serializer.errors:
+            return Response(
+                {'error': 'An account with this email already exists.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if 'phone' in serializer.errors:
+            return Response(
+                {'error': 'An account with this phone number already exists.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response(
+            {'error': serializer.errors},
+            status=status.HTTP_400_BAD_REQUEST
+        )
     user = serializer.save()
 
     refresh = RefreshToken.for_user(user)
@@ -363,6 +381,12 @@ def respond_sos(request, sos_id):
         sos = SOSRequest.objects.get(sos_id=sos_id)
     except SOSRequest.DoesNotExist:
         return Response({'error': 'SOS not found.'}, status=404)
+    
+    if sos.status == 'RESOLVED':
+        return Response(
+            {'error': 'This SOS has already been resolved.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     sos.handled_by = request.user
     sos.status     = 'IN_PROGRESS'
@@ -381,6 +405,12 @@ def resolve_sos(request, sos_id):
         sos = SOSRequest.objects.get(sos_id=sos_id)
     except SOSRequest.DoesNotExist:
         return Response({'error': 'SOS not found.'}, status=404)
+    
+    if sos.status == 'RESOLVED':
+        return Response(
+            {'error': 'This SOS is already resolved.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     sos.status      = 'RESOLVED'
     sos.resolved_at = timezone.now()
