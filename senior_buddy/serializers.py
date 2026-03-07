@@ -49,22 +49,46 @@ class RegisterSerializer(serializers.ModelSerializer):
         model  = User
         fields = ['full_name', 'email', 'phone', 'password', 'role_name']
 
+    def validate_phone(self, value):
+        import re
+        if not re.match(r'^\+?[0-9]{7,15}$', value):
+            raise serializers.ValidationError(
+                'Enter a valid phone number.'
+                )
+        return value
+
     def create(self, validated_data):
         role_name = validated_data.pop('role_name')
         password  = validated_data.pop('password')
 
-        # Create user
-        user = User(**validated_data)
-        user.username = validated_data['email']   # username required by AbstractUser
-        user.set_password(password)               # hashes the password
+        user = User.objects.create_user(
+            username=validated_data['email'],
+            email=validated_data['email'],
+            phone=validated_data['phone'],
+            full_name=validated_data['full_name'],
+            password=password
+        )
+        user.phone = validated_data['phone']
+        user.full_name = validated_data['full_name']
         user.save()
 
-        # Assign role
         role = Role.objects.get(role_name=role_name)
         UserRole.objects.create(user=user, role=role)
 
-        return user
+        if role_name == 'SENIOR':
+            from .models import SeniorProfile
+            SeniorProfile.objects.create(senior=user)
+        elif role_name == 'CAREGIVER':
+            from .models import CaregiverProfile
+            CaregiverProfile.objects.create(caregiver=user)
+        elif role_name == 'FAMILY':
+            from .models import FamilyProfile
+            FamilyProfile.objects.create(family=user)
+        elif role_name == 'VOLUNTEER':
+            from .models import VolunteerProfile
+            VolunteerProfile.objects.create(volunteer=user)
 
+        return user
 
 # =====================================================
 # USER SERIALIZERS

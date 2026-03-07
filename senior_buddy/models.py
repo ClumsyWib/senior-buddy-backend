@@ -104,7 +104,7 @@ class SeniorProfile(models.Model):
         db_column='senior_id',
         related_name='senior_profile'
     )
-    age               = models.IntegerField()
+    age               = models.IntegerField(null=True, blank=True)
     medical_history   = models.TextField(blank=True, null=True)
     emergency_contact = models.CharField(max_length=100)
 

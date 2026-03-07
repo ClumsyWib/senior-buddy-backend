@@ -71,11 +71,6 @@ def login_view(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_view(request):
-    """
-    POST /api/register/
-    Body: { "full_name": "...", "email": "...", "phone": "...",
-            "password": "...", "role_name": "SENIOR" }
-    """
     serializer = RegisterSerializer(data=request.data)
     if not serializer.is_valid():
         if 'email' in serializer.errors:
@@ -84,16 +79,19 @@ def register_view(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
         if 'phone' in serializer.errors:
+            phone_error = str(serializer.errors['phone'][0])
+            if 'valid phone' in phone_error:
+                return Response(
+                    {'error': phone_error},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             return Response(
                 {'error': 'An account with this phone number already exists.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        return Response(
-            {'error': serializer.errors},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    user = serializer.save()
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    user = serializer.save()
     refresh = RefreshToken.for_user(user)
     return Response({
         'access':  str(refresh.access_token),
