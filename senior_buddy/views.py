@@ -645,3 +645,39 @@ def my_seniors(request):
 
     seniors = SeniorProfile.objects.filter(senior_id__in=senior_ids)
     return Response(SeniorProfileSerializer(seniors, many=True).data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def unread_message_count(request):
+    """
+    GET /api/chat/unread-count/
+    Returns total unread messages and a breakdown per sender.
+    Android uses this to show notification badges.
+    """
+    unread = ChatMessage.objects.filter(
+        receiver=request.user,
+        is_read=False
+    )
+
+    total = unread.count()
+
+    # Breakdown by sender so Android can show badge per conversation
+    from django.db.models import Count
+    per_sender = unread.values(
+        'sender_id',
+        'sender__full_name'
+    ).annotate(count=Count('message_id'))
+
+    breakdown = [
+        {
+            'sender_id':   item['sender_id'],
+            'sender_name': item['sender__full_name'],
+            'unread':      item['count']
+        }
+        for item in per_sender
+    ]
+
+    return Response({
+        'total_unread': total,
+        'breakdown':    breakdown
+    })

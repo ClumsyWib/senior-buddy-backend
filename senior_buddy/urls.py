@@ -83,6 +83,7 @@ urlpatterns = [
     # --------------------------------------------------
     path('chat/<int:user_id>/',       views.ChatListView.as_view(),   name='chat'),
     path('chat/<int:user_id>/read/',  views.mark_messages_read,       name='chat-read'),
+    path('chat/unread-count/', views.unread_message_count, name='unread-count'),
 
     # --------------------------------------------------
     # ACTIVITY LOG
