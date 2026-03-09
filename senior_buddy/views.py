@@ -328,29 +328,19 @@ class ReminderDetailView(generics.RetrieveUpdateDestroyAPIView):
 class HealthNoteListView(generics.ListCreateAPIView):
     """
     GET  /api/health-notes/    — List health notes
-    POST /api/health-notes/    — Write a note (Caregiver only)
+    POST /api/health-notes/    — Write a note
     Volunteers cannot see this.
     """
     serializer_class   = HealthNoteSerializer
     permission_classes = [IsAuthenticated, IsNotVolunteer]
 
-    def get_queryset(self):
-        user  = self.request.user
-        roles = list(user.userrole_set.values_list('role__role_name', flat=True))
-
-        if 'CAREGIVER' in roles:
-            senior_ids = SeniorCaregiver.objects.filter(
-                caregiver=user
-            ).values_list('senior_id', flat=True)
-            return HealthNote.objects.filter(senior_id__in=senior_ids)
-        elif 'FAMILY' in roles:
-            senior_ids = SeniorFamily.objects.filter(
-                family=user
-            ).values_list('senior_id', flat=True)
-            return HealthNote.objects.filter(senior_id__in=senior_ids)
-        elif 'ADMIN' in roles:
-            return HealthNote.objects.all()
-        return HealthNote.objects.none()
+    def perform_create(self, serializer):
+        # Only Caregiver or Family can write notes
+        roles = list(self.request.user.userrole_set.values_list('role__role_name', flat=True))
+        from rest_framework.exceptions import PermissionDenied
+        if not any(role in roles for role in ['CAREGIVER', 'FAMILY']):
+            raise PermissionDenied('Only caregivers or family members can write health notes.')
+        serializer.save(writer=self.request.user)
 
 
 # =====================================================
@@ -369,7 +359,14 @@ class SOSListView(generics.ListAPIView):
         if 'SENIOR' in roles:
             return SOSRequest.objects.filter(senior=user)
         elif 'CAREGIVER' in roles:
-            return SOSRequest.objects.filter(status__in=['PENDING', 'IN_PROGRESS'])
+            # Only show SOS requests for their assigned seniors, Not all pending SOS requests
+            senior_ids = SeniorCaregiver.objects.filter(
+                caregiver=user
+            ).values_list('senior_id', flat=True)
+            return SOSRequest.objects.filter(
+                senior_id__in=senior_ids,
+                status__in=['PENDING', 'IN_PROGRESS']
+            )
         elif 'FAMILY' in roles:
             senior_ids = SeniorFamily.objects.filter(
                 family=user
@@ -388,10 +385,17 @@ def trigger_sos(request):
     Senior triggers an emergency SOS alert.
     No body needed — uses the logged-in user as the senior.
     """
+    # Only seniors can trigger SOS
+    roles = list(request.user.userrole_set.values_list('role__role_name', flat=True))
+    if 'SENIOR' not in roles:
+        return Response(
+            {'error': 'Only seniors can trigger an SOS.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
     sos = SOSRequest.objects.create(
         senior=request.user,
         status='PENDING'
-    )
+    ) 
     return Response(
         SOSRequestSerializer(sos).data,
         status=status.HTTP_201_CREATED
@@ -471,9 +475,14 @@ def escalate_sos(request, sos_id):
 
 class CommunityEventListView(generics.ListCreateAPIView):
     """GET/POST /api/events/"""
-    queryset           = CommunityEvent.objects.all().order_by('event_date')
     serializer_class   = CommunityEventSerializer
     permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        # Only show upcoming events, past events are filtered out
+        return CommunityEvent.objects.filter(
+            date__gte=timezone.now()
+        ).order_by('event_date')
 
 
 class CommunityEventDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -558,7 +567,10 @@ class ActivityLogListView(generics.ListCreateAPIView):
         user  = self.request.user
         roles = list(user.userrole_set.values_list('role__role_name', flat=True))
 
-        if 'CAREGIVER' in roles or 'VOLUNTEER' in roles:
+        if 'SENIOR' in roles:
+            # Seniors see all logs related to them
+            return ActivityLog.objects.filter(senior=user)
+        elif 'CAREGIVER' in roles or 'VOLUNTEER' in roles:
             # Show logs they personally performed
             return ActivityLog.objects.filter(performed_by=user)
         elif 'FAMILY' in roles:

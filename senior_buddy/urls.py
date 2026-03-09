@@ -1,5 +1,7 @@
 from django.urls import path
 from . import views
+from rest_framework_simplejwt.views import TokenRefreshView
+
 
 # =====================================================
 # SENIOR BUDDY — App URLs
@@ -16,6 +18,7 @@ urlpatterns = [
     path('logout/',   views.logout_view,   name='logout'),
     path('me/',       views.me_view,       name='me'),
     path('my-seniors/', views.my_seniors, name='my-seniors'),
+    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'), # Refresh access token using refresh token — no re-login needed
 
     # --------------------------------------------------
     # USERS (Admin only)
