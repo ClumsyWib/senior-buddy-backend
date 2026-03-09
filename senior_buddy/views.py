@@ -377,6 +377,37 @@ class ReminderListView(generics.ListCreateAPIView):
         elif 'ADMIN' in roles:
             return Reminder.objects.all()
         return Reminder.objects.none()
+    
+    def perform_create(self, serializer):
+        user     = self.request.user
+        roles    = list(user.userrole_set.values_list('role__role_name', flat=True))
+        senior   = serializer.validated_data['senior']
+
+        # Caregivers can only create reminders for their assigned seniors
+        if 'CAREGIVER' in roles:
+            is_assigned = SeniorCaregiver.objects.filter(
+                caregiver=user, senior=senior
+            ).exists()
+            if not is_assigned:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('You are not assigned to this senior.')
+
+        # Family can only create reminders for their linked seniors
+        elif 'FAMILY' in roles:
+            is_linked = SeniorFamily.objects.filter(
+                family=user, senior=senior
+            ).exists()
+            if not is_linked:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('You are not linked to this senior.')
+
+        # Seniors can only create reminders for themselves
+        elif 'SENIOR' in roles:
+            if senior != user:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('Seniors can only create reminders for themselves.')
+
+        serializer.save(created_by=self.request.user)
 
 
 class ReminderDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -424,7 +455,7 @@ class SOSListView(generics.ListAPIView):
         if 'SENIOR' in roles:
             return SOSRequest.objects.filter(senior=user)
         elif 'CAREGIVER' in roles:
-            # Only show SOS requests for their assigned seniors, Not all pending SOS requests
+            # Only show SOS for their assigned seniors
             senior_ids = SeniorCaregiver.objects.filter(
                 caregiver=user
             ).values_list('senior_id', flat=True)
@@ -447,7 +478,7 @@ class SOSListView(generics.ListAPIView):
 def trigger_sos(request):
     """
     POST /api/sos/trigger/
-    Senior triggers an emergency SOS alert.
+    Only seniors can trigger SOS.
     No body needed — uses the logged-in user as the senior.
     """
     # Only seniors can trigger SOS
@@ -457,10 +488,11 @@ def trigger_sos(request):
             {'error': 'Only seniors can trigger an SOS.'},
             status=status.HTTP_403_FORBIDDEN
         )
+
     sos = SOSRequest.objects.create(
         senior=request.user,
         status='PENDING'
-    ) 
+    )
     return Response(
         SOSRequestSerializer(sos).data,
         status=status.HTTP_201_CREATED
@@ -472,19 +504,34 @@ def trigger_sos(request):
 def respond_sos(request, sos_id):
     """
     PATCH /api/sos/<id>/respond/
-    Caregiver/Admin picks up the SOS.
+    Assigned caregivers, linked family, or Admin can respond.
     Sets handled_by to the current user and status to IN_PROGRESS.
     """
     try:
         sos = SOSRequest.objects.get(sos_id=sos_id)
     except SOSRequest.DoesNotExist:
         return Response({'error': 'SOS not found.'}, status=404)
-    
+
     if sos.status == 'RESOLVED':
         return Response(
             {'error': 'This SOS has already been resolved.'},
             status=status.HTTP_400_BAD_REQUEST
         )
+
+    # Assigned caregivers, linked family, or Admin can respond
+    roles = list(request.user.userrole_set.values_list('role__role_name', flat=True))
+    if 'ADMIN' not in roles:
+        is_caregiver = SeniorCaregiver.objects.filter(
+            caregiver=request.user, senior=sos.senior
+        ).exists()
+        is_family = SeniorFamily.objects.filter(
+            family=request.user, senior=sos.senior
+        ).exists()
+        if not is_caregiver and not is_family:
+            return Response(
+                {'error': 'You are not assigned to this senior.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
     sos.handled_by = request.user
     sos.status     = 'IN_PROGRESS'
@@ -497,18 +544,33 @@ def respond_sos(request, sos_id):
 def resolve_sos(request, sos_id):
     """
     PATCH /api/sos/<id>/resolve/
-    Marks the SOS as RESOLVED with a timestamp.
+    Assigned caregivers, linked family, or Admin can resolve.
     """
     try:
         sos = SOSRequest.objects.get(sos_id=sos_id)
     except SOSRequest.DoesNotExist:
         return Response({'error': 'SOS not found.'}, status=404)
-    
+
     if sos.status == 'RESOLVED':
         return Response(
             {'error': 'This SOS is already resolved.'},
             status=status.HTTP_400_BAD_REQUEST
         )
+
+    # Assigned caregivers, linked family, or Admin can resolve
+    roles = list(request.user.userrole_set.values_list('role__role_name', flat=True))
+    if 'ADMIN' not in roles:
+        is_caregiver = SeniorCaregiver.objects.filter(
+            caregiver=request.user, senior=sos.senior
+        ).exists()
+        is_family = SeniorFamily.objects.filter(
+            family=request.user, senior=sos.senior
+        ).exists()
+        if not is_caregiver and not is_family:
+            return Response(
+                {'error': 'Only an assigned caregiver, linked family, or Admin can resolve this SOS.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
     sos.status      = 'RESOLVED'
     sos.resolved_at = timezone.now()
@@ -521,12 +583,30 @@ def resolve_sos(request, sos_id):
 def escalate_sos(request, sos_id):
     """
     PATCH /api/sos/<id>/escalate/
-    Family member escalates an unresolved SOS.
+    Only linked family members or Admin can escalate.
     """
     try:
         sos = SOSRequest.objects.get(sos_id=sos_id)
     except SOSRequest.DoesNotExist:
         return Response({'error': 'SOS not found.'}, status=404)
+
+    if sos.status == 'RESOLVED':
+        return Response(
+            {'error': 'Cannot escalate a resolved SOS.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Only linked family or Admin can escalate
+    roles = list(request.user.userrole_set.values_list('role__role_name', flat=True))
+    if 'ADMIN' not in roles:
+        is_family = SeniorFamily.objects.filter(
+            family=request.user, senior=sos.senior
+        ).exists()
+        if not is_family:
+            return Response(
+                {'error': 'Only a linked family member or Admin can escalate this SOS.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
     sos.escalated_by = request.user
     sos.escalated_at = timezone.now()
@@ -647,6 +727,31 @@ class ActivityLogListView(generics.ListCreateAPIView):
         elif 'ADMIN' in roles:
             return ActivityLog.objects.all()
         return ActivityLog.objects.none()
+    
+    def perform_create(self, serializer):
+        user   = self.request.user
+        roles  = list(user.userrole_set.values_list('role__role_name', flat=True))
+        senior = serializer.validated_data['senior']
+
+        # Caregivers can only log for their assigned seniors
+        if 'CAREGIVER' in roles:
+            is_assigned = SeniorCaregiver.objects.filter(
+                caregiver=user, senior=senior
+            ).exists()
+            if not is_assigned:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('You are not assigned to this senior.')
+
+        # Volunteers can only log for their assigned seniors
+        elif 'VOLUNTEER' in roles:
+            is_assigned = SeniorVolunteer.objects.filter(
+                volunteer=user, senior=senior
+            ).exists()
+            if not is_assigned:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('You are not assigned to this senior.')
+
+        serializer.save(performed_by=self.request.user)
     
 @api_view(['GET', 'PUT'])
 @permission_classes([IsAuthenticated])
