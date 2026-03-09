@@ -58,37 +58,48 @@ class RegisterSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
+        from django.db import transaction #<- Handles rollback if any step fails
         role_name = validated_data.pop('role_name')
         password  = validated_data.pop('password')
 
-        user = User.objects.create_user(
-            username=validated_data['email'],
-            email=validated_data['email'],
-            phone=validated_data['phone'],
-            full_name=validated_data['full_name'],
-            password=password
-        )
-        user.phone = validated_data['phone']
-        user.full_name = validated_data['full_name']
-        user.save()
+         # ─────────────────────────────────────────────────────────────────
+        # transaction.atomic() ensures ALL of the following happen together:
+        # create user → assign role → create profile
+        # If ANY step fails, NOTHING is saved to the database.
+        # This prevents orphan users from being left behind.
+        # ─────────────────────────────────────────────────────────────────
+        with transaction.atomic():
 
-        role = Role.objects.get(role_name=role_name)
-        UserRole.objects.create(user=user, role=role)
+            # 1. Create the user
+            user = User.objects.create(
+                username=validated_data['email'],  # Set username = email for authentication
+                email=validated_data['email'],
+                phone=validated_data['phone'],
+                full_name=validated_data['full_name'],
+                password=password 
+            )
+            user.phone = validated_data['phone']
+            user.full_name = validated_data['full_name']
+            user.save()
 
-        if role_name == 'SENIOR':
-            from .models import SeniorProfile
-            SeniorProfile.objects.create(senior=user)
-        elif role_name == 'CAREGIVER':
-            from .models import CaregiverProfile
-            CaregiverProfile.objects.create(caregiver=user)
-        elif role_name == 'FAMILY':
-            from .models import FamilyProfile
-            FamilyProfile.objects.create(family=user)
-        elif role_name == 'VOLUNTEER':
-            from .models import VolunteerProfile
-            VolunteerProfile.objects.create(volunteer=user)
+            # 2. Assign the role to user
+            role = Role.objects.get(role_name=role_name)
+            UserRole.objects.create(user=user, role=role)
+
+            # 3. Create role-specific profile
+            # if this fails for any reason, user + role are rolled back and NOT saved to the database
+            if role_name == 'SENIOR':
+                SeniorProfile.objects.create(senior=user)
+            elif role_name == 'CAREGIVER':
+                CaregiverProfile.objects.create(caregiver=user)
+            elif role_name == 'FAMILY':
+                FamilyProfile.objects.create(family=user)
+            elif role_name == 'VOLUNTEER':
+                VolunteerProfile.objects.create(volunteer=user)
 
         return user
+
+            
 
 # =====================================================
 # USER SERIALIZERS
