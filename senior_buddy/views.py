@@ -169,24 +169,24 @@ class SeniorProfileDetailView(generics.RetrieveUpdateAPIView):
 
 
 class CaregiverProfileListView(generics.ListCreateAPIView):
-    """GET/POST /api/caregivers/"""
+    """GET/POST /api/caregivers/ — Admin can see all caregivers, others cannot see this endpoint"""
     queryset           = CaregiverProfile.objects.select_related('caregiver').all()
     serializer_class   = CaregiverProfileSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdmin]
 
 
 class FamilyProfileListView(generics.ListCreateAPIView):
     """GET/POST /api/family/"""
     queryset           = FamilyProfile.objects.select_related('family').all()
     serializer_class   = FamilyProfileSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdmin]
 
 
 class VolunteerProfileListView(generics.ListCreateAPIView):
-    """GET/POST /api/volunteers/"""
+    """GET/POST /api/volunteers/ — Admin can see all volunteers, others cannot see this endpoint"""
     queryset           = VolunteerProfile.objects.select_related('volunteer').all()
     serializer_class   = VolunteerProfileSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdmin]
 
 
 # =====================================================
@@ -244,6 +244,71 @@ class SeniorVolunteerListView(generics.ListCreateAPIView):
             data['warning'] = instance._warning
 
         return Response(data, status=status.HTTP_201_CREATED)
+    
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def unassign_caregiver(request, pk):
+    """
+    DELETE /api/assignments/caregivers/<pk>/
+    Admin or Family can unassign a caregiver from a senior.
+    """
+    roles = list(request.user.userrole_set.values_list('role__role_name', flat=True))
+    if not any(role in roles for role in ['ADMIN', 'FAMILY']):
+        return Response(
+            {'error': 'Only Admin or Family can unassign a caregiver.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    try:
+        assignment = SeniorCaregiver.objects.get(pk=pk)
+    except SeniorCaregiver.DoesNotExist:
+        return Response({'error': 'Assignment not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    assignment.delete()
+    return Response({'message': 'Caregiver unassigned successfully.'}, status=status.HTTP_200_OK)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def unassign_family(request, pk):
+    """
+    DELETE /api/assignments/family/<pk>/
+    Admin or Family can remove a family member link.
+    """
+    roles = list(request.user.userrole_set.values_list('role__role_name', flat=True))
+    if not any(role in roles for role in ['ADMIN', 'FAMILY']):
+        return Response(
+            {'error': 'Only Admin or Family can unassign a family member.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    try:
+        assignment = SeniorFamily.objects.get(pk=pk)
+    except SeniorFamily.DoesNotExist:
+        return Response({'error': 'Assignment not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    assignment.delete()
+    return Response({'message': 'Family member unassigned successfully.'}, status=status.HTTP_200_OK)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def unassign_volunteer(request, pk):
+    """
+    DELETE /api/assignments/volunteers/<pk>/
+    Admin or Family can unassign a volunteer from a senior.
+    """
+    roles = list(request.user.userrole_set.values_list('role__role_name', flat=True))
+    if not any(role in roles for role in ['ADMIN', 'FAMILY']):
+        return Response(
+            {'error': 'Only Admin or Family can unassign a volunteer.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    try:
+        assignment = SeniorVolunteer.objects.get(pk=pk)
+    except SeniorVolunteer.DoesNotExist:
+        return Response({'error': 'Assignment not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    assignment.delete()
+    return Response({'message': 'Volunteer unassigned successfully.'}, status=status.HTTP_200_OK)
 
 # =====================================================
 # DOCTOR ENDPOINTS

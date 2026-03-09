@@ -156,7 +156,7 @@ class VolunteerProfile(models.Model):
         on_delete=models.CASCADE,
         primary_key=True,
         db_column='volunteer_id',
-        related_name='volunteer_profile'
+        related_name='volunteer_profile' 
     )
     skills       = models.TextField(blank=True, null=True)
     availability = models.CharField(max_length=200, blank=True, null=True)

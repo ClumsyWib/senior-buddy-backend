@@ -47,6 +47,10 @@ urlpatterns = [
     path('assignments/family/',      views.SeniorFamilyListView.as_view(),    name='assign-family'),
     path('assignments/volunteers/',  views.SeniorVolunteerListView.as_view(), name='assign-volunteer'),
 
+    path('assignments/caregivers/<int:pk>/', views.unassign_caregiver, name='unassign-caregiver'), 
+    path('assignments/family/<int:pk>/',     views.unassign_family,    name='unassign-family'),
+    path('assignments/volunteers/<int:pk>/', views.unassign_volunteer, name='unassign-volunteer'),
+
     # --------------------------------------------------
     # DOCTORS
     # --------------------------------------------------
