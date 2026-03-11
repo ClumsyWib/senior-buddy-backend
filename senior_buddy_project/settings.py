@@ -90,15 +90,11 @@ WSGI_APPLICATION = 'senior_buddy_project.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE':   'django.db.backends.mysql',
-        'NAME':     'senior_buddy_db',
-        'USER':     'root',
-        'PASSWORD': os.environ.get('DB_PASSWORD', ''),   # ← Change this to your MySQL root password
-        'HOST':     'localhost',
-        'PORT':     '3306',
-        'OPTIONS': {
-            'charset': 'utf8mb4',
-            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
-        },
+        'NAME':     config('DB_NAME', default='senior_buddy_db'),
+        'USER':     config('DB_USER', default='root'),
+        'PASSWORD': config('DB_PASSWORD', default=''),
+        'HOST':     config('DB_HOST', default='localhost'),
+        'PORT':     config('DB_PORT', default='3306'),
     }
 }
 

@@ -93,6 +93,9 @@ urlpatterns = [
     path('chat/<int:user_id>/read/',  views.mark_messages_read,       name='chat-read'),
     path('chat/unread-count/', views.unread_message_count, name='unread-count'),
 
+    path('my-contacts/', views.my_contacts, name='my-contacts'), 
+    #get list of all contacts (seniors, caregivers, family, volunteers) assigned to logged-in user for chat purposes
+
     # --------------------------------------------------
     # ACTIVITY LOG
     # --------------------------------------------------

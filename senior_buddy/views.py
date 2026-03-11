@@ -933,3 +933,69 @@ def unread_message_count(request):
         'total_unread': total,
         'breakdown':    breakdown
     })
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_contacts(request):
+    """
+    GET /api/my-contacts/
+    Returns all users the logged-in user can chat with, with unread count per contact.
+    """
+    user  = request.user
+    roles = list(user.userrole_set.values_list('role__role_name', flat=True))
+
+    contact_ids = set()
+
+    if 'SENIOR' in roles:
+        # Caregivers, family, volunteers assigned to this senior
+        contact_ids.update(SeniorCaregiver.objects.filter(senior=user).values_list('caregiver_id', flat=True))
+        contact_ids.update(SeniorFamily.objects.filter(senior=user).values_list('family_id', flat=True))
+        contact_ids.update(SeniorVolunteer.objects.filter(senior=user).values_list('volunteer_id', flat=True))
+
+    elif 'CAREGIVER' in roles:
+        # Assigned seniors + those seniors' family members
+        senior_ids = SeniorCaregiver.objects.filter(caregiver=user).values_list('senior_id', flat=True)
+        contact_ids.update(senior_ids)
+        contact_ids.update(SeniorFamily.objects.filter(senior_id__in=senior_ids).values_list('family_id', flat=True))
+
+    elif 'FAMILY' in roles:
+        # Assigned seniors + those seniors' caregivers
+        senior_ids = SeniorFamily.objects.filter(family=user).values_list('senior_id', flat=True)
+        contact_ids.update(senior_ids)
+        contact_ids.update(SeniorCaregiver.objects.filter(senior_id__in=senior_ids).values_list('caregiver_id', flat=True))
+
+    elif 'VOLUNTEER' in roles:
+        # Assigned seniors only
+        contact_ids.update(SeniorVolunteer.objects.filter(volunteer=user).values_list('senior_id', flat=True))
+
+    elif 'ADMIN' in roles:
+        # Everyone except themselves
+        contact_ids.update(User.objects.exclude(pk=user.pk).values_list('pk', flat=True))
+
+    # Remove self just in case
+    contact_ids.discard(user.pk)
+
+    # Build response with unread count per contact
+    contacts = User.objects.filter(pk__in=contact_ids)
+
+    result = []
+    for contact in contacts:
+        unread = ChatMessage.objects.filter(
+            sender=contact,
+            receiver=user,
+            is_read=False
+        ).count()
+
+        role_names = list(contact.userrole_set.values_list('role__role_name', flat=True))
+
+        result.append({
+            'user_id':     contact.pk,
+            'full_name':   contact.full_name,
+            'role':        role_names[0] if role_names else 'UNKNOWN',
+            'unread_count': unread,
+        })
+
+    # Sort by unread count descending so active chats appear first
+    result.sort(key=lambda x: x['unread_count'], reverse=True)
+
+    return Response(result)
