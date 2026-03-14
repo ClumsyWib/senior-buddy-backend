@@ -667,7 +667,7 @@ class CommunityEventListView(generics.ListCreateAPIView):
     def get_queryset(self):
         # Only show upcoming events, past events are filtered out
         return CommunityEvent.objects.filter(
-            event__date__gte=timezone.now()
+            event_date__gte=timezone.now()
         ).order_by('event_date')
 
 
