@@ -357,12 +357,14 @@ class SeniorDoctorListView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsNotVolunteer]
 
     def perform_create(self, serializer):
-        serializer.save(added_by=self.request.user)
+        user = self.request.user
+        roles = list(user.userrole_set.values_list('role__role_name', flat=True))
+        senior = serializer.validated_data['senior']
 
         # Caregiver or Family can only assign doctors to seniors they are linked to
         if 'CAREGIVER' in roles:
             is_assigned = SeniorCaregiver.objects.filter(
-                caregiver=user,senior=senior
+                caregiver=user, senior=senior
             ).exists()
             if not is_assigned:
                 from rest_framework.exceptions import PermissionDenied
@@ -377,7 +379,7 @@ class SeniorDoctorListView(generics.ListCreateAPIView):
                 from rest_framework.exceptions import PermissionDenied
                 raise PermissionDenied('You are not linked to this senior.')
             
-        serializer.save(added_by=self.request.user)
+        serializer.save(added_by=user)
 
 
 # =====================================================
@@ -475,7 +477,7 @@ class HealthNoteListView(generics.ListCreateAPIView):
         from rest_framework.exceptions import PermissionDenied
         if not any(role in roles for role in ['CAREGIVER', 'FAMILY']):
             raise PermissionDenied('Only caregivers or family members can write health notes.')
-        serializer.save(writer=self.request.user)
+        serializer.save()
 
 
 # =====================================================
@@ -665,7 +667,7 @@ class CommunityEventListView(generics.ListCreateAPIView):
     def get_queryset(self):
         # Only show upcoming events, past events are filtered out
         return CommunityEvent.objects.filter(
-            date__gte=timezone.now()
+            event__date__gte=timezone.now()
         ).order_by('event_date')
 
 
